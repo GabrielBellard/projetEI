@@ -9,6 +9,8 @@ import glob
 import os
 import io
 import nltk
+import SentiWordNet as svn
+from nltk.tokenize import RegexpTokenizer
 
 dataset_path_imdb = '/home/gabz/Documents/projetEI/aclImdb/'
 dataset_path_mrd = '/home/gabz/Documents/projetEI/rt-polaritydata/'
@@ -67,23 +69,49 @@ def build_dict_feature_hashing_mrd(path):
 			sentences_neg.append(line)
 	os.chdir(currdir)
 
-	sentences_pos, sentences_neg = stemmering_sentences_mrd(sentences_pos, sentences_neg)
+	# for item in nltk.bigrams(tweetString.split()):
+	# 	bigramFeatureVector.append(' '.join(item))
+
 
 	hasher = HashingVectorizer(n_features=2 ** 18,
 							   stop_words='english', non_negative=True,
-							   norm=None, binary=False)
+							   norm=None, binary=False, ngram_range=(1,3))
+
 	vectorizer = Pipeline([('hasher', hasher), ('tf_idf', TfidfTransformer())])
 
 	sentences = sentences_pos + sentences_neg
 
-	X_train, X_test, y_train, y_test = train_test_split(
-		sentences, [1] * len(sentences_pos) + [0] * len(sentences_neg), test_size=0.4,
-		random_state=58)
+	for sentence in sentences:
+		print("pour la phrase " + sentence)
+		global_pos = 0
+		global_neg = 0
+		sentence = nltk.word_tokenize(sentence)
+		for word in sentence :
+			if (word not in string.punctuation) and (word not in nltk.corpus.stopwords.words('english')):
+				word_pos, word_neg = svn.get_score_word(word)
+				global_pos += word_pos
+				global_neg += word_neg
+		print("pos " + str(global_pos))
+		print("neg " + str(global_neg))
 
-	X_train = vectorizer.fit_transform([' '.join(term) for term in X_train])
-	X_test = vectorizer.fit_transform([' '.join(term) for term in X_test])
+	sentences = stemmering_sentences_mrd(sentences)
 
-	return X_train, X_test, y_train, y_test
+	print(sentences)
+
+	X_sentences = vectorizer.fit_transform([' '.join(term) for term in sentences])
+
+
+
+
+
+	# X_train, X_test, y_train, y_test = train_test_split(
+	# 	sentences, [1] * len(sentences_pos) + [0] * len(sentences_neg), test_size=0.4,
+	# 	random_state=58)
+
+	# X_train = vectorizer.fit_transform([' '.join(term) for term in X_train])
+	# X_test = vectorizer.fit_transform([' '.join(term) for term in X_test])
+
+	# return X_train, X_test, y_train, y_test
 
 
 def stemmering_sentences(sentences_train, sentences_test):
@@ -105,32 +133,25 @@ def stemmering_sentences(sentences_train, sentences_test):
 		sentences_test[i] = doc
 
 
-def stemmering_sentences_mrd(sentences_pos, sentences_neg):
+def stemmering_sentences_mrd(sentences):
 	sentences_pos_stem = []
 	# Remove punctuation, stopword and then stemmering
 	punctuation = set(string.punctuation)
 	stemmer = nltk.PorterStemmer()
-	for i in range(len(sentences_pos)):
-		tmp = sentences_pos[i]
-		# tmp = unicode(tmp, errors='ignore')
-		doc = [stemmer.stem(word) for word in nltk.word_tokenize(tmp) if
+	for i in range(len(sentences)):
+		tmp = sentences[i]
+
+		doc = [stemmer.stem(word) for word in tmp if
 			   (word not in punctuation) and (word not in nltk.corpus.stopwords.words('english'))]
 		sentences_pos_stem.append(doc)
 
-	sentences_neg_stem = []
-
-	for i in range(len(sentences_neg)):
-		tmp = sentences_neg[i]
-		# tmp = unicode(tmp, errors='ignore')
-		doc = [stemmer.stem(word) for word in nltk.word_tokenize(tmp) if
-			   (word not in punctuation) and (word not in nltk.corpus.stopwords.words('english'))]
-		sentences_neg_stem.append(doc)
-
-	return sentences_pos_stem, sentences_neg_stem
+	return sentences_pos_stem
 
 
 def main():
+
 	imdb = False
+
 	if imdb:
 		X_train, X_test = build_dict_feature_hashing_imdb(os.path.join(dataset_path_imdb, 'train'),
 														  os.path.join(dataset_path_imdb, 'test'))
@@ -145,15 +166,12 @@ def main():
 		X_train, X_test, y_train, y_test = build_dict_feature_hashing_mrd(dataset_path_mrd)
 
 
-
-
-
-	if imdb:
-		pickle_file('train_imdb.pkl', (X_train, y_train))
-		pickle_file('test_imdb.pkl', (X_test, y_test))
-	else:
-		pickle_file('train_mrd_stem.pkl', (X_train, y_train))
-		pickle_file('test_mrd_stem.pkl', (X_test, y_test))
+	# if imdb:
+	# 	pickle_file('train_imdb.pkl', (X_train, y_train))
+	# 	pickle_file('test_imdb.pkl', (X_test, y_test))
+	# else:
+	# 	pickle_file('train_mrd_stem.pkl', (X_train, y_train))
+	# 	pickle_file('test_mrd_stem.pkl', (X_test, y_test))
 
 
 if __name__ == '__main__':
