@@ -141,7 +141,7 @@ def stemmering_sentences_mrd(sentences):
 	for i in range(len(sentences)):
 		tmp = sentences[i]
 
-		doc = [stemmer.stem(word) for word in tmp if
+		doc = [stemmer.stem(word) for word in nltk.word_tokenize(tmp) if
 			   (word not in punctuation) and (word not in nltk.corpus.stopwords.words('english'))]
 		sentences_pos_stem.append(doc)
 
