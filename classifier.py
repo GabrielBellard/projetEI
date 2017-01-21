@@ -10,8 +10,8 @@ import xgboost
 from sklearn import cross_validation, metrics   #Additional scklearn functions
 from sklearn.model_selection import GridSearchCV   #Perforing grid search
 
-X_train, y_train = unpickle_file("train_mrd_stem.pkl")
-X_test, y_test = unpickle_file("test_mrd_stem.pkl")
+X_train, y_train = unpickle_file("train_mrd_sentiword.pkl")
+X_test, y_test = unpickle_file("test_mrd_sentiword.pkl")
 
 # print "Classifier RBF"
 #
