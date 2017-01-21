@@ -13,6 +13,7 @@ import nltk
 import SentiWordNet as svn
 import tqdm
 from sklearn.feature_extraction import DictVectorizer
+import metacritic
 
 dataset_path_imdb = 'aclImdb/'
 dataset_path_mrd = 'rt-polaritydata/'
@@ -71,53 +72,10 @@ def build_dict_feature_hashing_mrd(path):
             sentences_neg.append(line)
     os.chdir(currdir)
 
-    # for item in nltk.bigrams(tweetString.split()):
-    # 	bigramFeatureVector.append(' '.join(item))
-
-
-    hasher = HashingVectorizer(n_features=2 ** 18,
-                               stop_words='english', non_negative=True,
-                               norm=None, binary=False, ngram_range=(1, 3))
-
-    vectorizer = Pipeline([('hasher', hasher), ('tf_idf', TfidfTransformer())])
-
     sentences = sentences_pos + sentences_neg
 
-    # polarity_arr = []
-    # for sentence in tqdm.tqdm(sentences):
-    #     polarity_dic = {}
-    #     global_pos = 0
-    #     global_neg = 0
-    #     sentence = nltk.word_tokenize(sentence)
-    #     for word in sentence:
-    #         if (word not in string.punctuation) and (word not in nltk.corpus.stopwords.words('english')):
-    #             word_pos, word_neg = svn.get_score_word(word)
-    #             global_pos += word_pos
-    #             global_neg += word_neg
-    #     polarity_dic["pos"] = global_pos
-    #     polarity_dic["neg"] = global_neg
-    #     polarity_arr.append(polarity_dic)
+    X = build_dic(sentences)
 
-    polarity_arr = []
-    for sentence in tqdm.tqdm(sentences):
-        polarity_dic = {}
-        global_pol = 0
-        sentence = nltk.word_tokenize(sentence)
-        for word in sentence:
-            if (word not in string.punctuation) and (word not in nltk.corpus.stopwords.words('english')):
-                word_pos, word_neg = svn.get_score_word(word)
-                global_pol = word_pos - word_neg
-        polarity_dic["pol"] = global_pol
-        polarity_arr.append(polarity_dic)
-
-    v = DictVectorizer()
-    print(polarity_arr)
-    X_polarity = v.fit_transform(polarity_arr)
-
-    sentences = stemmering_sentences_mrd(sentences)
-    X_sentences = vectorizer.fit_transform([' '.join(term) for term in sentences])
-
-    X = scipy.sparse.hstack([X_sentences, X_polarity])
     print(X)
     X_train, X_test, y_train, y_test = train_test_split(
         X, [1] * len(sentences_pos) + [0] * len(sentences_neg), test_size=0.4,
@@ -127,6 +85,82 @@ def build_dict_feature_hashing_mrd(path):
     # X_test = vectorizer.fit_transform([' '.join(term) for term in X_test])
 
     return X_train, X_test, y_train, y_test
+
+
+def build_dic(sentences):
+    hasher = HashingVectorizer(n_features=2 ** 18,
+                               stop_words='english', non_negative=True,
+                               norm=None, binary=False)
+    vectorizer = Pipeline([('hasher', hasher), ('tf_idf', TfidfTransformer())])
+    polarity_arr = []
+    for sentence in tqdm.tqdm(sentences):
+        polarity_dic = {}
+        global_pos = 0
+        global_neg = 0
+        sentence = nltk.word_tokenize(sentence)
+        for word in sentence:
+            if (word not in string.punctuation) and (word not in nltk.corpus.stopwords.words('english')):
+
+                pos_tag = str(nltk.tag.pos_tag([word])[0][1]).lower()
+
+                if pos_tag.startswith("n"):
+                    pos_tag = 'n'
+                elif pos_tag.startswith("v"):
+                    pos_tag = 'v'
+                elif pos_tag.startswith("j"):
+                    pos_tag = 'a'
+                elif pos_tag.startswith("r"):
+                    pos_tag = 'r'
+                else:
+                    pos_tag = None
+
+                if pos_tag is None:
+                    global_pos = 0.0
+                    global_neg = 0.0
+                else:
+                    word_pos, word_neg = svn.get_score_word(word, pos_tag)
+                    global_pos += word_pos
+                    global_neg += word_neg
+
+        polarity_dic["pos"] = global_pos
+        polarity_dic["neg"] = global_neg
+        polarity_arr.append(polarity_dic)
+
+    # polarity_arr = []
+    # for sentence in tqdm.tqdm(sentences):
+    #     polarity_dic = {}
+    #     global_pol = 0
+    #     sentence = nltk.word_tokenize(sentence)
+    #     for word in sentence:
+    #         if (word not in string.punctuation) and (word not in nltk.corpus.stopwords.words('english')):
+    #
+    #             pos_tag = str(nltk.tag.pos_tag([word])[0][1]).lower()
+    #
+    #             if pos_tag.startswith("n"):
+    #                 pos_tag = 'n'
+    #             elif  pos_tag.startswith("v"):
+    #                 pos_tag = 'v'
+    #             elif pos_tag.startswith("j"):
+    #                 pos_tag = 'a'
+    #             elif pos_tag.startswith("r"):
+    #                 pos_tag = 'r'
+    #             else:
+    #                 pos_tag = None
+    #
+    #             if pos_tag is None:
+    #                  global_pol = 0
+    #             else:
+    #                 word_pos, word_neg = svn.get_score_word(word, pos_tag)
+    #                 global_pol = word_pos - word_neg
+    #
+    #     polarity_dic["pol"] = global_pol
+    #     polarity_arr.append(polarity_dic)
+    v = DictVectorizer()
+    X_polarity = v.fit_transform(polarity_arr)
+    sentences = stemmering_sentences_mrd(sentences)
+    X_sentences = vectorizer.fit_transform([' '.join(term) for term in sentences])
+    X = scipy.sparse.hstack([X_sentences, X_polarity])
+    return X
 
 
 def stemmering_sentences(sentences_train, sentences_test):
@@ -182,8 +216,8 @@ def main():
         pickle_file('train_imdb.pkl', (X_train, y_train))
         pickle_file('test_imdb.pkl', (X_test, y_test))
     else:
-        pickle_file('train_mrd_sentiword_1feat.pkl', (X_train, y_train))
-        pickle_file('test_mrd_sentiword_1feat.pkl', (X_test, y_test))
+        pickle_file('train_mrd_sentiword_postag.pkl', (X_train, y_train))
+        pickle_file('test_mrd_sentiword _postag.pkl', (X_test, y_test))
 
 
 if __name__ == '__main__':

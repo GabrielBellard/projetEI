@@ -1,3 +1,6 @@
+# coding=utf-8
+from __future__ import print_function
+from __future__ import print_function
 from sklearn import svm
 from sklearn.metrics import classification_report, accuracy_score
 from sklearn.tree import DecisionTreeClassifier
@@ -6,24 +9,20 @@ from utils import *
 import time
 import imdb_preprocess
 import xgboost
+from collections import Counter
+import metacritic
+import pprint
 
-from sklearn import cross_validation, metrics   #Additional scklearn functions
-from sklearn.model_selection import GridSearchCV   #Perforing grid search
+from sklearn import cross_validation, metrics  # Additional scklearn functions
+from sklearn.model_selection import GridSearchCV  # Perforing grid search
 
 X_train, y_train = unpickle_file("train_mrd_sentiword_postag.pkl")
-X_test, y_test = unpickle_file("test_mrd_sentiword_postag.pkl")
 
-# import metacritic
-#
-# critics = metacritic.get_movie_critics_for_letter("titanic")
-# import pprint
-#
-# pprint.pprint(critics)
-#
-# X_test = imdb_preprocess.build_dic(critics)
+critics = metacritic.get_movie_critics_for_letter("jack-and-jill")
 
+pprint.pprint(critics)
 
-
+X_test = imdb_preprocess.build_dic(critics)
 
 # print "Classifier RBF"
 #
@@ -53,9 +52,8 @@ time_linear_predict = t2 - t1
 
 print("Results for SVC(kernel=linear)")
 print("Training time: %fs; Prediction time: %fs" % (time_linear_train, time_linear_predict))
-# print(prediction_linear)
-print(classification_report(y_test, prediction_linear))
-print(accuracy_score(y_test, prediction_linear))
+
+
 # #
 # # Perform classification with SVM, kernel=linear
 # classifier_liblinear = svm.LinearSVC()
@@ -133,3 +131,38 @@ print(accuracy_score(y_test, prediction_linear))
 # print("Training time: %fs; Prediction time: %fs" % (time_xgboost_train, time_xgboost_predict))
 # print(classification_report(y_test, dt_predict))
 # print(accuracy_score(y_test, dt_predict))
+
+prediction_linear = prediction_linear.tolist()
+
+pos = float(prediction_linear.count(1))
+neg = float(prediction_linear.count(0))
+
+len = float(len(prediction_linear))
+
+ratio_pos = (pos / len) * 100
+ration_neg = (neg / len) * 100
+
+
+if pos > neg:
+    print("Pour le theme : " + str("titanic") + ", l'opinion des utilisateurs de twitter est plutot positif (a ", int(ratio_pos), " %)")
+else:
+    print("Pour le theme : " + str("titanic") + ", l'opinion des utilisateurs de twitter est plutot negatif (a ", int(ration_neg), " %)")
+
+from pylab import *
+
+# make a square figure and axes
+figure(1, figsize=(6, 6))
+ax = axes([0.1, 0.1, 0.8, 0.8])
+
+# The slices will be ordered and plotted counter-clockwise.
+labels = 'Positif', 'Negatif'
+
+fracs = [ratio_pos, ration_neg]
+explode = (0, 0.05)
+
+pie(fracs, explode=explode, labels=labels,
+    autopct='%1.1f%%', shadow=True, startangle=90)
+
+title('Opinion ' + str("titanic"), bbox={'facecolor': '0.8', 'pad': 5})
+
+show()
