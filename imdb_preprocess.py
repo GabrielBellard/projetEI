@@ -83,23 +83,35 @@ def build_dict_feature_hashing_mrd(path):
 
     sentences = sentences_pos + sentences_neg
 
+    # polarity_arr = []
+    # for sentence in tqdm.tqdm(sentences):
+    #     polarity_dic = {}
+    #     global_pos = 0
+    #     global_neg = 0
+    #     sentence = nltk.word_tokenize(sentence)
+    #     for word in sentence:
+    #         if (word not in string.punctuation) and (word not in nltk.corpus.stopwords.words('english')):
+    #             word_pos, word_neg = svn.get_score_word(word)
+    #             global_pos += word_pos
+    #             global_neg += word_neg
+    #     polarity_dic["pos"] = global_pos
+    #     polarity_dic["neg"] = global_neg
+    #     polarity_arr.append(polarity_dic)
+
     polarity_arr = []
     for sentence in tqdm.tqdm(sentences):
         polarity_dic = {}
-        global_pos = 0
-        global_neg = 0
+        global_pol = 0
         sentence = nltk.word_tokenize(sentence)
         for word in sentence:
             if (word not in string.punctuation) and (word not in nltk.corpus.stopwords.words('english')):
                 word_pos, word_neg = svn.get_score_word(word)
-                global_pos += word_pos
-                global_neg += word_neg
-        polarity_dic["pos"] = global_pos
-        polarity_dic["neg"] = global_neg
+                global_pol = word_pos - word_neg
+        polarity_dic["pol"] = global_pol
         polarity_arr.append(polarity_dic)
 
     v = DictVectorizer()
-
+    print(polarity_arr)
     X_polarity = v.fit_transform(polarity_arr)
 
     sentences = stemmering_sentences_mrd(sentences)
@@ -170,8 +182,8 @@ def main():
         pickle_file('train_imdb.pkl', (X_train, y_train))
         pickle_file('test_imdb.pkl', (X_test, y_test))
     else:
-        pickle_file('train_mrd_sentiword.pkl', (X_train, y_train))
-        pickle_file('test_mrd_sentiword.pkl', (X_test, y_test))
+        pickle_file('train_mrd_sentiword_1feat.pkl', (X_train, y_train))
+        pickle_file('test_mrd_sentiword_1feat.pkl', (X_test, y_test))
 
 
 if __name__ == '__main__':
