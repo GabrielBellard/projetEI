@@ -1,46 +1,53 @@
+# coding=utf-8
+import argparse
+
 from sklearn import svm
 from sklearn.metrics import classification_report, accuracy_score
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import GradientBoostingClassifier
 from utils import *
 import time
-import imdb_preprocess
-import xgboost
 
-from sklearn import cross_validation, metrics   #Additional scklearn functions
-from sklearn.model_selection import GridSearchCV   #Perforing grid search
+parser = argparse.ArgumentParser(description='Test the model you want to test')
+parser.add_argument('-d', '--dataset', help='which dataset imdb or mrd', required=True, nargs=1, type=str)
+parser.add_argument('-s', '--sentiwordnet', help='use sentiwordnet', action='store_true')
+parser.add_argument('-np', '--number_polarity', help='if 2 features pos and neg or global', required=False, type=int,
+                    nargs=1)
+args = parser.parse_args()
 
-X_train, y_train = unpickle_file("train_mrd_sentiword_postag.pkl")
-X_test, y_test = unpickle_file("test_mrd_sentiword_postag.pkl")
+n_polarity = 0
 
-# import metacritic
-#
-# critics = metacritic.get_movie_critics_for_letter("titanic")
-# import pprint
-#
-# pprint.pprint(critics)
-#
-# X_test = imdb_preprocess.build_dic(critics)
+if args.sentiwordnet is True and args.number_polarity is None:
+    parser.error("-s, --sentiwordnet requires --np 1|2 ")
+
+if args.sentiwordnet is False:
+    n_polarity = 0
+
+if args.sentiwordnet and 2 in args.number_polarity :
+    double_features = True
+    n_polarity = 2
+
+elif args.sentiwordnet and 1 in args.number_polarity:
+    double_features = False
+    n_polarity = 1
 
 
+if "imdb" in str(args.dataset):
 
+    print('Loading train_imdb_' + str(n_polarity) + '.pkl')
+    X_train, y_train = unpickle_file('train_imdb_' + str(n_polarity) + '.pkl')
+    print('Loading test_imdb_' + str(n_polarity) + '.pkl')
+    X_test, y_test = unpickle_file('test_imdb_' + str(n_polarity) + '.pkl')
 
-# print "Classifier RBF"
-#
-# classifier_rbf = svm.SVC()
-# t0 = time.time()
-# classifier_rbf.fit(X_train, y_train)
-# t1 = time.time()
-# prediction_rbf = classifier_rbf.predict(X_test)
-# t2 = time.time()
-# time_rbf_train = t1 - t0
-# time_rbf_predict = t2 - t1
-#
-# print("Training time: %fs; Prediction time: %fs" % (time_rbf_train, time_rbf_predict))
-# print("Results for SVC(kernel=rbf)")
-# print(classification_report(y_test, prediction_rbf))
-#
-# Perform classification with SVM, kernel=linear
+elif "mrd" in str(args.dataset):
+
+    print('Loading train_mrd_' + str(n_polarity) + '.pkl')
+    X_train, y_train = unpickle_file('train_mrd_' + str(n_polarity) + '.pkl')
+    print('Loading test_mrd_' + str(n_polarity) + '.pkl')
+    X_test, y_test = unpickle_file('test_mrd_' + str(n_polarity) + '.pkl')
+
+else:
+    parser.error("-d, --dataset requires imdb or mrd")
+
+print('Fitting SVC Linéaire')
 
 classifier_linear = svm.SVC(kernel='linear', C=1)
 t0 = time.time()
@@ -53,83 +60,20 @@ time_linear_predict = t2 - t1
 
 print("Results for SVC(kernel=linear)")
 print("Training time: %fs; Prediction time: %fs" % (time_linear_train, time_linear_predict))
-# print(prediction_linear)
 print(classification_report(y_test, prediction_linear))
 print(accuracy_score(y_test, prediction_linear))
-# #
-# # Perform classification with SVM, kernel=linear
-# classifier_liblinear = svm.LinearSVC()
-# t0 = time.time()
-# classifier_liblinear.fit(X_train, y_train)
-# t1 = time.time()
-# prediction_liblinear = classifier_liblinear.predict(X_test)
-# t2 = time.time()
-# time_liblinear_train = t1 - t0
-# time_liblinear_predict = t2 - t1
 
-# Print results in a nice table
+print('Fitting SVC LibLinéaire')
+classifier_liblinear = svm.LinearSVC()
+t0 = time.time()
+classifier_liblinear.fit(X_train, y_train)
+t1 = time.time()
+prediction_liblinear = classifier_liblinear.predict(X_test)
+t2 = time.time()
+time_liblinear_train = t1 - t0
+time_liblinear_predict = t2 - t1
 
-
-# print("Results for LinearSVC()")
-# print("Training time: %fs; Prediction time: %fs" % (time_liblinear_train, time_liblinear_predict))
-# print(classification_report(y_test, prediction_liblinear))
-# print(accuracy_score(y_test, prediction_liblinear))
-#
-# print 'Test XGBOOST'
-#
-# clf = xgboost.XGBClassifier(learning_rate =0.1,
-#                              n_estimators=1000,
-#                              max_depth=9,
-#                              min_child_weight=3,
-#                              gamma=0,
-#                              subsample=0.8,
-#                              colsample_bytree=0.8,
-#                              objective= 'binary:logistic',
-#                              nthread=4,
-#                              scale_pos_weight=1,
-#                              seed=27)
-# t0 = time.time()
-# clf.fit(X_train, y_train)
-# t1 = time.time()
-# xgboost_predict = clf.predict(X_test)
-# t2 = time.time()
-# time_xgboost_train = t1 - t0
-# time_xgboost_predict = t2 - t1
-#
-# print("Results for xgboost")
-# print("Training time: %fs; Prediction time: %fs" % (time_xgboost_train, time_xgboost_predict))
-# print(classification_report(y_test, xgboost_predict))
-# print(accuracy_score(y_test, xgboost_predict))
-
-# param_test1 = {
-#  'max_depth':range(3,10,2),
-#  'min_child_weight':range(1,6,2)
-# }
-#
-# param_test3 = {
-#  'gamma':[i/10.0 for i in range(0,5)]
-# }
-#
-# gsearch1 = GridSearchCV(estimator = xgboost.XGBClassifier( learning_rate =0.1, n_estimators=140, max_depth=9,
-#  min_child_weight=3, gamma=0.3, subsample=0.8, colsample_bytree=0.8,
-#  objective= 'binary:logistic', nthread=4, scale_pos_weight=1, seed=27),
-#  param_grid = param_test3, scoring='roc_auc',n_jobs=4,iid=False, cv=5)
-# gsearch1.fit(X_train, y_train)
-#
-# print gsearch1.cv_results_, gsearch1.best_params_, gsearch1.best_score_
-
-# print 'Test DT'
-#
-# clf = DecisionTreeClassifier()
-# t0 = time.time()
-# clf.fit(X_train, y_train)
-# t1 = time.time()
-# dt_predict = clf.predict(X_test)
-# t2 = time.time()
-# time_xgboost_train = t1 - t0
-# time_xgboost_predict = t2 - t1
-#
-# print("Results for dt")
-# print("Training time: %fs; Prediction time: %fs" % (time_xgboost_train, time_xgboost_predict))
-# print(classification_report(y_test, dt_predict))
-# print(accuracy_score(y_test, dt_predict))
+print("Results for LinearSVC()")
+print("Training time: %fs; Prediction time: %fs" % (time_liblinear_train, time_liblinear_predict))
+print(classification_report(y_test, prediction_liblinear))
+print(accuracy_score(y_test, prediction_liblinear))
