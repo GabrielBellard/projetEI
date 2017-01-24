@@ -18,8 +18,8 @@ import SentiWordNet as svn
 import tqdm
 from constants import *
 from joblib import Parallel, delayed
-import multiprocessing
 import time
+from sklearn import svm
 
 from sklearn.feature_extraction import DictVectorizer
 
@@ -44,8 +44,8 @@ def build_dict_feature_hashing_imdb():
         with io.open(ff, 'r', encoding='utf-8') as f:
             sentences_test.append(f.readline().strip())
 
-    X_train = build_dic(sentences_train)
-    X_test = build_dic(sentences_test)
+    X_train = build_dic(sentences_train, double_features)
+    X_test = build_dic(sentences_test, double_features)
 
     return X_train, X_test
 
@@ -69,7 +69,7 @@ def build_dict_feature_hashing_mrd():
 
     sentences = sentences_pos + sentences_neg
 
-    X = build_dic(sentences)
+    X = build_dic(sentences, double_features)
 
     X_train, X_test, y_train, y_test = train_test_split(
         X, [1] * len(sentences_pos) + [0] * len(sentences_neg), test_size=0.4,
@@ -78,7 +78,7 @@ def build_dict_feature_hashing_mrd():
     return X_train, X_test, y_train, y_test
 
 
-def build_dic(sentences):
+def build_dic(sentences, double_features):
     hasher = HashingVectorizer(n_features=2 ** 18,
                                stop_words='english',
                                norm=None)
@@ -87,7 +87,7 @@ def build_dic(sentences):
     if sentiwordnet:
         polarity_arr2 = []
 
-        polarity_arr = Parallel(n_jobs=num_cores)(delayed(get_polarity)(sentence) for
+        polarity_arr = Parallel(n_jobs=num_cores)(delayed(get_polarity)(sentence, double_features) for
                                                   sentence in tqdm.tqdm(sentences, desc="compute polarity"))
 
         [polarity_arr2.append(dict_) for list in polarity_arr for dict_ in list]
@@ -105,8 +105,10 @@ def build_dic(sentences):
 
     # [sentences_stem2.append(liste) for liste in sentences_stem]
 
-    print(sentences_stem)
-    X_sentences = vectorizer.fit_transform([' '.join(term) for term in sentences_stem])
+
+    sentences_stem2 = [' '.join(term) for term in sentences_stem]
+
+    X_sentences = vectorizer.fit_transform(sentences_stem2)
 
     if sentiwordnet:
         X = scipy.sparse.hstack([X_sentences, X_polarity])
@@ -116,17 +118,18 @@ def build_dic(sentences):
         return X_sentences
 
 
-def get_polarity(sentence):
+def get_polarity(sentence, double_features):
     # sentences_stem_ = do_stemming(sentence)
 
-    polarity_arr = compute_polarity(sentence)
+    polarity_arr = compute_polarity(sentence, double_features)
 
     # polarity_arr.append(polarity_arr_)
 
     return polarity_arr
 
 
-def compute_polarity(sentence):
+def compute_polarity(sentence, double_features):
+
     polarity_arr = []
     polarity_dic = {}
     if double_features:
@@ -185,9 +188,9 @@ def stemmering_sentences(sentence):
 
     doc = [stemmer.stem(word.lower()) for word in nltk.word_tokenize(tmp) if
            (word not in punctuation) and (word not in nltk.corpus.stopwords.words('english'))]
-    sentences_stem.append(doc)
+    #sentences_stem.append(doc)
 
-    return sentences_stem
+    return doc
 
 
 if __name__ == '__main__':
@@ -232,14 +235,28 @@ if __name__ == '__main__':
 
         y_test = [1] * n_test + [0] * n_test
 
-        pickle_file('train_imdb_' + str(n_polarity) + '.pkl', (X_train, y_train))
+        print("pickle file : "+'test_imdb_' + str(n_polarity) + '.pkl')
         pickle_file('test_imdb_' + str(n_polarity) + '.pkl', (X_test, y_test))
+
+        print("Fitting SVM")
+        clf = svm.SVC(kernel='linear', C=1)
+        clf.fit(X_train, y_train)
+
+        print('Saving model : '+'train_imdb_' + str(n_polarity) + '.pkl')
+        pickle_file('train_imdb_' + str(n_polarity) + '.pkl', clf)
 
     elif "mrd" in str(args.dataset):
         X_train, X_test, y_train, y_test = build_dict_feature_hashing_mrd()
 
-        pickle_file('train_mrd_' + str(n_polarity) + '.pkl', (X_train, y_train))
+        print("pickle file : " + 'test_mrd_' + str(n_polarity) + '.pkl')
         pickle_file('test_mrd_' + str(n_polarity) + '.pkl', (X_test, y_test))
+
+        print("Fitting SVM")
+        clf = svm.SVC(kernel='linear', C=1)
+        clf.fit(X_train, y_train)
+
+        print('Saving model : ' + 'train_imdb_' + str(n_polarity) + '.pkl')
+        pickle_file('train_mrd_' + str(n_polarity) + '.pkl', clf)
 
     else:
         parser.error("-d, --dataset requires imdb or mrd")

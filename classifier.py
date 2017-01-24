@@ -1,7 +1,6 @@
 # coding=utf-8
 import argparse
 
-from sklearn import svm
 from sklearn.metrics import classification_report, accuracy_score
 from utils import *
 import time
@@ -33,14 +32,14 @@ elif args.sentiwordnet and 1 in args.number_polarity:
 if "imdb" in str(args.dataset):
 
     print('Loading train_imdb_' + str(n_polarity) + '.pkl')
-    X_train, y_train = unpickle_file('train_imdb_' + str(n_polarity) + '.pkl')
+    clf = unpickle_file('train_imdb_' + str(n_polarity) + '.pkl')
     print('Loading test_imdb_' + str(n_polarity) + '.pkl')
     X_test, y_test = unpickle_file('test_imdb_' + str(n_polarity) + '.pkl')
 
 elif "mrd" in str(args.dataset):
 
     print('Loading train_mrd_' + str(n_polarity) + '.pkl')
-    X_train, y_train = unpickle_file('train_mrd_' + str(n_polarity) + '.pkl')
+    clf = unpickle_file('train_mrd_' + str(n_polarity) + '.pkl')
     print('Loading test_mrd_' + str(n_polarity) + '.pkl')
     X_test, y_test = unpickle_file('test_mrd_' + str(n_polarity) + '.pkl')
 
@@ -49,31 +48,13 @@ else:
 
 print('Fitting SVC Linéaire')
 
-classifier_linear = svm.SVC(kernel='linear', C=1)
-t0 = time.time()
-classifier_linear.fit(X_train, y_train)
-t1 = time.time()
-prediction_linear = classifier_linear.predict(X_test)
-t2 = time.time()
-time_linear_train = t1 - t0
-time_linear_predict = t2 - t1
+
+
+
+y_pred = clf.predict(X_test)
+
 
 print("Results for SVC(kernel=linear)")
-print("Training time: %fs; Prediction time: %fs" % (time_linear_train, time_linear_predict))
-print(classification_report(y_test, prediction_linear))
-print(accuracy_score(y_test, prediction_linear))
+print(classification_report(y_test, y_pred))
+print(accuracy_score(y_test, y_pred))
 
-print('Fitting SVC LibLinéaire')
-classifier_liblinear = svm.LinearSVC()
-t0 = time.time()
-classifier_liblinear.fit(X_train, y_train)
-t1 = time.time()
-prediction_liblinear = classifier_liblinear.predict(X_test)
-t2 = time.time()
-time_liblinear_train = t1 - t0
-time_liblinear_predict = t2 - t1
-
-print("Results for LinearSVC()")
-print("Training time: %fs; Prediction time: %fs" % (time_liblinear_train, time_liblinear_predict))
-print(classification_report(y_test, prediction_liblinear))
-print(accuracy_score(y_test, prediction_liblinear))
