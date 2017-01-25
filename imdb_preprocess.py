@@ -24,7 +24,7 @@ from sklearn import svm
 from sklearn.feature_extraction import DictVectorizer
 
 
-def build_dict_feature_hashing_imdb():
+def build_dict_feature_hashing_imdb(double_features):
     sentences_train = []
 
     for ff in tqdm.tqdm(glob.glob(os.path.join(path_train_pos, '*.txt')), desc="train pos"):
@@ -50,7 +50,7 @@ def build_dict_feature_hashing_imdb():
     return X_train, X_test
 
 
-def build_dict_feature_hashing_mrd():
+def build_dict_feature_hashing_mrd(double_features):
     sentences_pos = []
 
     ff = os.path.join(dataset_path_mrd, 'rt-polarity_utf8.pos')
@@ -92,18 +92,12 @@ def build_dic(sentences, double_features):
 
         [polarity_arr2.append(dict_) for list in polarity_arr for dict_ in list]
 
-    sentences_stem = []
-    sentences_stem2 = []
-    # sentences_stem = stemmering_sentences(sentences)
-
     sentences_stem = Parallel(n_jobs=num_cores)(delayed(stemmering_sentences)(sentence) for
                                                 sentence in tqdm.tqdm(sentences, desc="stem"))
 
     if sentiwordnet:
         feature_hasher = FeatureHasher()
         X_polarity = feature_hasher.fit_transform(polarity_arr2)
-
-    # [sentences_stem2.append(liste) for liste in sentences_stem]
 
 
     sentences_stem2 = [' '.join(term) for term in sentences_stem]
@@ -227,7 +221,7 @@ if __name__ == '__main__':
         num_cores = args.j
 
     if "imdb" in str(args.dataset):
-        X_train, X_test = build_dict_feature_hashing_imdb()
+        X_train, X_test = build_dict_feature_hashing_imdb(double_features)
         n_train = X_train.shape[0] / 2
         y_train = [1] * n_train + [0] * n_train
 
@@ -246,7 +240,7 @@ if __name__ == '__main__':
         pickle_file('train_imdb_' + str(n_polarity) + '.pkl', clf)
 
     elif "mrd" in str(args.dataset):
-        X_train, X_test, y_train, y_test = build_dict_feature_hashing_mrd()
+        X_train, X_test, y_train, y_test = build_dict_feature_hashing_mrd(double_features)
 
         print("pickle file : " + 'test_mrd_' + str(n_polarity) + '.pkl')
         pickle_file('test_mrd_' + str(n_polarity) + '.pkl', (X_test, y_test))
@@ -255,7 +249,7 @@ if __name__ == '__main__':
         clf = svm.SVC(kernel='linear', C=1)
         clf.fit(X_train, y_train)
 
-        print('Saving model : ' + 'train_imdb_' + str(n_polarity) + '.pkl')
+        print('Saving model : ' + 'train_mrd_' + str(n_polarity) + '.pkl')
         pickle_file('train_mrd_' + str(n_polarity) + '.pkl', clf)
 
     else:
