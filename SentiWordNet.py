@@ -2,12 +2,12 @@ import nltk.corpus.reader.sentiwordnet as snw
 SWN_FILENAME = "SentiWordNet/SentiWordNet_3.0.0_20130122.txt"
 sw = snw.SentiWordNetCorpusReader('', [SWN_FILENAME])
 
-def get_score_word(word):
+def get_score_word(word, pos_tag):
 
     global_pos = 0
     global_neg = 0
 
-    senses = list(sw.senti_synsets(word))
+    senses = list(sw.senti_synsets(word, pos_tag))
 
     for i in range(len(senses)):
         sens = list(senses)[i]
