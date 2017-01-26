@@ -46,9 +46,6 @@ elif "mrd" in str(args.dataset):
 else:
     parser.error("-d, --dataset requires imdb or mrd")
 
-print('Fitting SVC Linéaire')
-
-
 
 
 y_pred = clf.predict(X_test)

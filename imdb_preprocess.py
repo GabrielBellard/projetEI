@@ -200,6 +200,7 @@ if __name__ == '__main__':
 
     timestr = time.strftime("%Y%m%d-%H%M%S")
     n_polarity = 0
+    double_features = False
     if args.sentiwordnet is True and args.number_polarity is None:
         parser.error("-s, --sentiwordnet requires --np 1|2 ")
 
