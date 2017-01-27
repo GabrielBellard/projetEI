@@ -135,7 +135,7 @@ def compute_polarity(sentence, double_features):
     sentence = nltk.word_tokenize(sentence)
     for word in sentence:
 
-        if (word not in string.punctuation) and (word not in nltk.corpus.stopwords.words('english')):
+        if (word not in string.punctuation) and (word not in nltk.corpus.stopwords.words('english')) and word != 'br':
 
             pos_tag = str(nltk.tag.pos_tag([word])[0][1]).lower()
 
