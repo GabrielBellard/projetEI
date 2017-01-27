@@ -1,11 +1,10 @@
 # coding=utf-8
 from __future__ import print_function
-from __future__ import print_function
 from sklearn import svm
-from imdb_preprocess import double_features
+from imdb_preprocess import *
 from utils import *
 import time
-import imdb_preprocess
+
 
 import metacritic
 import pprint
@@ -17,7 +16,7 @@ critics = metacritic.get_movie_critics_for_letter("jack-and-jill")
 
 pprint.pprint(critics)
 
-X_test = imdb_preprocess.build_dic(critics, double_features)
+X_test = build_dic(critics, double_features)
 
 classifier_linear = svm.SVC(kernel='linear', C=1)
 t0 = time.time()

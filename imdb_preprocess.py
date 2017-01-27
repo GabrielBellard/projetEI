@@ -82,6 +82,7 @@ def build_dic(sentences, double_features):
     hasher = HashingVectorizer(n_features=2 ** 18,
                                stop_words='english',
                                norm=None)
+
     vectorizer = Pipeline([('hasher', hasher), ('tf_idf', TfidfTransformer())])
 
     if sentiwordnet:
@@ -194,6 +195,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--sentiwordnet', help='use sentiwordnet', action='store_true')
     parser.add_argument('-np', '--number_polarity', help='if 2 features pos and neg or global', required=False,
                         type=int, nargs=1)
+    parser.add_argument('-m', '--model', help='which model svm or lstm', required=True, nargs=1, type=str)
     parser.add_argument('-j', '--joblib', help='number of jobs for parallelism', required=False, type=int,
                         default=num_cores)
     args = parser.parse_args()
@@ -221,6 +223,11 @@ if __name__ == '__main__':
     if args.joblib != num_cores:
         num_cores = args.j
 
+    if "lstm" in args.model:
+        model = "lstm"
+    else:
+        model = "svm"
+
     if "imdb" in str(args.dataset):
         X_train, X_test = build_dict_feature_hashing_imdb(double_features)
         n_train = X_train.shape[0] / 2
@@ -230,28 +237,28 @@ if __name__ == '__main__':
 
         y_test = [1] * n_test + [0] * n_test
 
-        print("pickle file : "+'test_imdb_' + str(n_polarity) + '.pkl')
-        pickle_file('test_imdb_' + str(n_polarity) + '.pkl', (X_test, y_test))
+        print("pickle file : "+model+'_test_imdb_' + str(n_polarity) + '.pkl')
+        pickle_file(model+'_test_imdb_' + str(n_polarity) + '.pkl', (X_test, y_test))
 
         print("Fitting SVM")
         clf = svm.SVC(kernel='linear', C=1)
         clf.fit(X_train, y_train)
 
-        print('Saving model : '+'train_imdb_' + str(n_polarity) + '.pkl')
-        pickle_file('train_imdb_' + str(n_polarity) + '.pkl', clf)
+        print('Saving model : '+model+'_train_imdb_' + str(n_polarity) + '.pkl')
+        pickle_file(model+'_train_imdb_' + str(n_polarity) + '.pkl', clf)
 
     elif "mrd" in str(args.dataset):
         X_train, X_test, y_train, y_test = build_dict_feature_hashing_mrd(double_features)
 
-        print("pickle file : " + 'test_mrd_' + str(n_polarity) + '.pkl')
-        pickle_file('test_mrd_' + str(n_polarity) + '.pkl', (X_test, y_test))
+        print("pickle file : " + model+'_test_mrd_' + str(n_polarity) + '.pkl')
+        pickle_file(model+'_test_mrd_' + str(n_polarity) + '.pkl', (X_test, y_test))
 
         print("Fitting SVM")
         clf = svm.SVC(kernel='linear', C=1)
         clf.fit(X_train, y_train)
 
-        print('Saving model : ' + 'train_mrd_' + str(n_polarity) + '.pkl')
-        pickle_file('train_mrd_' + str(n_polarity) + '.pkl', clf)
+        print('Saving model : ' + model+'_train_mrd_' + str(n_polarity) + '.pkl')
+        pickle_file(model+'_train_mrd_' + str(n_polarity) + '.pkl', clf)
 
     else:
         parser.error("-d, --dataset requires imdb or mrd")

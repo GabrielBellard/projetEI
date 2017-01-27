@@ -10,6 +10,7 @@ parser.add_argument('-d', '--dataset', help='which dataset imdb or mrd', require
 parser.add_argument('-s', '--sentiwordnet', help='use sentiwordnet', action='store_true')
 parser.add_argument('-np', '--number_polarity', help='if 2 features pos and neg or global', required=False, type=int,
                     nargs=1)
+parser.add_argument('-m', '--model', help='which model svm or lstm', required=True, nargs=1, type=str)
 args = parser.parse_args()
 
 n_polarity = 0
@@ -28,20 +29,24 @@ elif args.sentiwordnet and 1 in args.number_polarity:
     double_features = False
     n_polarity = 1
 
+if "lstm" in args.model:
+    model = "lstm"
+else:
+    model = "svm"
 
 if "imdb" in str(args.dataset):
 
-    print('Loading train_imdb_' + str(n_polarity) + '.pkl')
-    clf = unpickle_file('train_imdb_' + str(n_polarity) + '.pkl')
-    print('Loading test_imdb_' + str(n_polarity) + '.pkl')
-    X_test, y_test = unpickle_file('test_imdb_' + str(n_polarity) + '.pkl')
+    print('Loading'+model+'_train_imdb_' + str(n_polarity) + '.pkl')
+    clf = unpickle_file(model+'_train_imdb_' + str(n_polarity) + '.pkl')
+    print('Loading' +model+'_test_imdb_' + str(n_polarity) + '.pkl')
+    X_test, y_test = unpickle_file(model+'_test_imdb_' + str(n_polarity) + '.pkl')
 
 elif "mrd" in str(args.dataset):
 
-    print('Loading train_mrd_' + str(n_polarity) + '.pkl')
+    print('Loading '+model+'_train_mrd_' + str(n_polarity) + '.pkl')
     clf = unpickle_file('train_mrd_' + str(n_polarity) + '.pkl')
-    print('Loading test_mrd_' + str(n_polarity) + '.pkl')
-    X_test, y_test = unpickle_file('test_mrd_' + str(n_polarity) + '.pkl')
+    print('Loading'+model+'_test_mrd_' + str(n_polarity) + '.pkl')
+    X_test, y_test = unpickle_file(model+'_test_mrd_' + str(n_polarity) + '.pkl')
 
 else:
     parser.error("-d, --dataset requires imdb or mrd")
