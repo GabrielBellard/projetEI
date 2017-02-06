@@ -1,7 +1,7 @@
 # coding=utf-8
 from __future__ import print_function
 from sklearn import svm
-from imdb_preprocess import *
+from reviews_preprocess import *
 from utils import *
 import time
 
