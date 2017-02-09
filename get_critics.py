@@ -16,7 +16,7 @@ critics = metacritic.get_movie_critics_for_letter("jack-and-jill")
 
 pprint.pprint(critics)
 
-X_test = build_dic(critics, double_features)
+X_test = build_dic_svm(critics, double_features)
 
 classifier_linear = svm.SVC(kernel='linear', C=1)
 t0 = time.time()

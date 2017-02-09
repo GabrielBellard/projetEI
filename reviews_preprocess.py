@@ -6,13 +6,12 @@ import string
 
 import scipy.sparse
 from bs4 import BeautifulSoup
-from sklearn.decomposition import SparsePCA
+
 from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction import FeatureHasher
 from sklearn.feature_extraction.text import HashingVectorizer, TfidfVectorizer
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
 from utils import *
 import glob
 import io
@@ -24,11 +23,21 @@ from joblib import Parallel, delayed
 import time
 from sklearn import svm
 from sklearn.feature_selection.univariate_selection import SelectKBest, chi2
-from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
 import matplotlib.pyplot as plt
+import numpy as np
 
-def build_dict_feature_vectorizer_imdb(double_features):
+import warnings
+
+warnings.filterwarnings(action='ignore', category=UserWarning, module='gensim')
+
+np.random.seed(1337)  # for reproducibility
+
+from gensim.models.word2vec import Word2Vec
+from gensim.corpora.dictionary import Dictionary
+
+
+def build_dict_feature_imdb(double_features):
     sentences_train = []
 
     for ff in tqdm.tqdm(glob.glob(os.path.join(path_train_pos, '*.txt')), desc="train pos"):
@@ -48,45 +57,42 @@ def build_dict_feature_vectorizer_imdb(double_features):
         with io.open(ff, 'r', encoding='utf-8') as f:
             sentences_test.append(f.readline().strip())
 
-    X_train, vectorizer_fitted = build_dic(sentences_train, double_features)
-    X_test, _ = build_dic(sentences_test, double_features, vectorizer_fitted)
+    if model == "svm":
+        X_train, vectorizer_fitted = build_dic_svm(sentences_train, double_features)
+        X_test, _ = build_dic_svm(sentences_test, double_features, vectorizer_fitted)
 
-    pickle_file("X_train.pkl", X_train)
-    pickle_file("X_test.pkl", X_test)
+    elif model == "cnn" or model == "lstm":
+        X_train, w2indx = build_dic_nn(sentences=sentences_train, double_features=double_features,
+                                       vocab_dim=vocab_dim_IMDB,
+                                       n_exposures=n_exposures_IMDB)
 
-    X_train = unpickle_file("X_train.pkl")
-    X_test = unpickle_file("X_test.pkl")
+        X_test, _ = build_dic_nn(sentences=sentences_test, double_features=double_features, w2indx=w2indx)
 
-    print(X_train.shape)
-    print(X_test.shape)
     n = X_train.shape[0] / 2
     y_train = [1] * n + [0] * n
     y_test = [1] * n + [0] * n
 
-    pca = TruncatedSVD(n_components=2, algorithm="arpack").fit(X_train)
-    data2D = pca.transform(X_train)
-    plt.scatter(data2D[:, 0], data2D[:, 1], c=y_train)
-    plt.show()
-
-    if hashing_trick:
-        fselect = SelectKBest(chi2, k=200000)
-    else:
-        if negation:
+    if feature_selection:
+        print("Doing feature selection")
+        if hashing_trick:
             fselect = SelectKBest(chi2, k=200000)
         else:
-            fselect = SelectKBest(chi2, k=200000)
+            if negation:
+                fselect = SelectKBest(chi2, k=200000)
+            else:
+                fselect = SelectKBest(chi2, k=200000)
 
-    X_train = fselect.fit_transform(X_train, y_train)
+        X_train = fselect.fit_transform(X_train, y_train)
 
-    X_test = fselect.transform(X_test)
+        X_test = fselect.transform(X_test)
 
     return X_train, X_test, y_train, y_test
 
 
-def build_dict_feature_vectorizer_mrd(double_features):
+def build_dict_feature_spd(double_features):
     sentences_pos = []
 
-    ff = os.path.join(dataset_path_mrd, 'rt-polarity_utf8.pos')
+    ff = os.path.join(dataset_path_spd, 'rt-polarity_utf8.pos')
 
     with io.open(ff, 'r', encoding='UTF-8') as f:
         for line in tqdm.tqdm(f, desc="sentences pos"):
@@ -94,7 +100,7 @@ def build_dict_feature_vectorizer_mrd(double_features):
             sentences_pos.append(line)
 
     sentences_neg = []
-    ff = os.path.join(dataset_path_mrd, 'rt-polarity_utf8.neg')
+    ff = os.path.join(dataset_path_spd, 'rt-polarity_utf8.neg')
     with io.open(ff, 'r', encoding='UTF-8') as f:
         for line in tqdm.tqdm(f, desc="sentences neg"):
             # time.sleep(0.001)
@@ -106,47 +112,43 @@ def build_dict_feature_vectorizer_mrd(double_features):
 
     sentences_train, sentences_test, y_train, y_test = train_test_split(sentences, y, test_size=0.2, random_state=58)
 
-    X_train, vectorizer = build_dic(sentences_train, double_features)
-    X_test, _ = build_dic(sentences_test, double_features, vectorizer)
+    if model == "svm":
+        X_train, vectorizer = build_dic_svm(sentences_train, double_features)
+        X_test, _ = build_dic_svm(sentences_test, double_features, vectorizer)
+    elif model == "cnn" or model == "lstm":
+        X_train, w2indx = build_dic_nn(sentences=sentences_train, double_features=double_features,
+                                       vocab_dim=vocab_dim_SPD,
+                                       n_exposures=n_exposures_SPD)
+        X_test, _ = build_dic_nn(sentences=sentences_test, double_features=double_features, w2indx=w2indx)
 
-    pickle_file("mrd_train.pkl", X_train)
-    pickle_file("mrd_test.pkl", X_test)
-
-    X_train = unpickle_file("mrd_train.pkl")
-    X_test = unpickle_file("mrd_test.pkl")
-
-    pca = TruncatedSVD (n_components=2).fit(X_train)
-    data2D = pca.transform(X_train)
-    plt.scatter(data2D[:, 0], data2D[:, 1], c = y_train)
-    plt.show()
-
-    if hashing_trick:
-        fselect = SelectKBest(chi2, k=9500)
-    else:
-        if negation:
+    if feature_selection:
+        print("Doing feature selection")
+        if hashing_trick:
             fselect = SelectKBest(chi2, k=9500)
         else:
-            fselect = SelectKBest(chi2, k=8500)
+            if negation:
+                fselect = SelectKBest(chi2, k=9500)
+            else:
+                fselect = SelectKBest(chi2, k=8500)
 
+        X_train = fselect.fit_transform(X_train, y_train)
 
-
-    X_train = fselect.fit_transform(X_train, y_train)
-
-    X_test = fselect.transform(X_test)
-
-    # f = np.asarray(fselect.get_feature_names())[chi2.get_support()]
+        X_test = fselect.transform(X_test)
 
     return X_train, X_test, y_train, y_test
 
 
-def build_dic(sentences, double_features, vectorizer_fitted=None):
+def build_dic_svm(sentences, double_features, vectorizer_fitted=None):
     do_negation = negation
+
+    # if training data because we do not fit testing data
     if hashing_trick and vectorizer_fitted is None:
         hasher = HashingVectorizer(norm=None, non_negative=True)
 
         vectorizer = Pipeline([('hasher', hasher), ('tf_idf', TfidfTransformer())])
 
     elif not hashing_trick and vectorizer_fitted is None:
+        # some parameters that we tuned
         vectorizer = TfidfVectorizer(min_df=2, max_df=0.95, ngram_range=(1, 6),
                                      sublinear_tf=True)
 
@@ -154,15 +156,7 @@ def build_dic(sentences, double_features, vectorizer_fitted=None):
         vectorizer = vectorizer_fitted
 
     if sentiwordnet:
-        polarity_arr2 = []
-
-        polarity_arr = Parallel(n_jobs=num_cores)(delayed(get_polarity)(sentence, double_features) for
-                                                  sentence in tqdm.tqdm(sentences, desc="compute polarity"))
-
-        [polarity_arr2.append(dict_) for list in polarity_arr for dict_ in list]
-
-        feature_hasher = FeatureHasher(non_negative=True)
-        X_polarity = feature_hasher.fit_transform(polarity_arr2)
+        X_polarity = get_polarity(double_features, sentences)
 
     sentences_stem = Parallel(n_jobs=num_cores)(delayed(preprocessing_sentences)(sentence, do_negation) for
                                                 sentence in tqdm.tqdm(sentences, desc="preprocessing"))
@@ -172,13 +166,14 @@ def build_dic(sentences, double_features, vectorizer_fitted=None):
     start = time.time()
     if vectorizer_fitted is not None:
         X_sentences = vectorizer.transform(sentences_stem2)
-    else :
+    else:
         X_sentences = vectorizer.fit_transform(sentences_stem2)
     end = time.time()
     elapsed = end - start
     print("temps de vectorisation : " + str(elapsed))
 
     if sentiwordnet:
+        # if sentiwordnet we add a feature
         X = scipy.sparse.hstack([X_sentences, X_polarity])
         return X, vectorizer
 
@@ -186,14 +181,75 @@ def build_dic(sentences, double_features, vectorizer_fitted=None):
         return X_sentences, vectorizer
 
 
-def get_polarity(sentence, double_features):
-    # sentences_stem_ = do_stemming(sentence)
+def build_dic_nn(sentences, double_features, w2indx=None, vocab_dim=None, n_exposures=None):
+    do_negation = negation
 
-    polarity_arr = compute_polarity(sentence, double_features)
+    if sentiwordnet:
+        X_polarity = get_polarity(double_features, sentences)
 
-    # polarity_arr.append(polarity_arr_)
+    sentences_stem = Parallel(n_jobs=num_cores)(delayed(preprocessing_sentences)(sentence, do_negation) for
+                                                sentence in tqdm.tqdm(sentences, desc="preprocessing"))
 
-    return polarity_arr
+    sentences_stem2 = [' '.join(term) for term in sentences_stem]
+
+    if w2indx is None:
+        w2indx = train_w2v(sentences_stem, vocab_dim, n_exposures)
+
+    X_sentences = build_w2c_dic(sentences_stem2, w2indx)
+
+    if sentiwordnet:
+        X = scipy.sparse.hstack([X_sentences, X_polarity])
+        return X, w2indx
+
+    else:
+        return X_sentences, w2indx
+
+
+def build_w2c_dic(sentences_stem2, w2indx):
+    X_sentences = []
+    for doc in sentences_stem2:
+        new_txt = []
+        for word in doc:
+            try:
+                new_txt.append(w2indx[word])
+            except:
+                new_txt.append(0)
+        X_sentences.append(new_txt)
+    return X_sentences
+
+
+def train_w2v(sentences_stem2, vocab_dim, n_exposures):
+    print('Training a Word2vec model...')
+    model = Word2Vec(size=vocab_dim,
+                     min_count=n_exposures,
+                     window=window_size,
+                     workers=num_cores,
+                     iter=n_iterations)
+    model.build_vocab(sentences_stem2)
+    model.train(sentences_stem2)
+    gensim_dict = Dictionary()
+    gensim_dict.doc2bow(model.vocab.keys(), allow_update=True)
+    w2indx = {v: k + 1 for k, v in gensim_dict.items()}
+    w2vec = {word: model[word] for word in w2indx.keys()}
+    print('Setting up Arrays for Keras Embedding Layer...')
+    n_symbols = len(w2indx) + 1  # adding 1 to account for 0th index
+    embedding_weights = np.zeros((n_symbols + 1, vocab_dim))
+    for word, index in w2indx.items():
+        embedding_weights[index, :] = w2vec[word]
+
+    pickle_file("cnn_embedding_weights_" + str(corpus) + "n_" + str(negation) + ".pkl", embedding_weights)
+
+    return w2indx
+
+
+def get_polarity(double_features, sentences):
+    polarity_arr2 = []
+    polarity_arr = Parallel(n_jobs=num_cores)(delayed(compute_polarity)(sentence, double_features) for
+                                              sentence in tqdm.tqdm(sentences, desc="compute polarity"))
+    [polarity_arr2.append(dict_) for list in polarity_arr for dict_ in list]
+    feature_hasher = FeatureHasher(non_negative=True)
+    X_polarity = feature_hasher.fit_transform(polarity_arr2)
+    return X_polarity
 
 
 def compute_polarity(sentence, double_features):
@@ -279,24 +335,105 @@ def preprocessing_sentences(sentence, do_negation):
     return doc
 
 
+def construct_cnn(vocab_dim, maxlen, batch_size):
+    clf = Sequential()
+    embedding_weights = unpickle_file("cnn_embedding_weights_" + str(corpus) + "n_" + str(negation) + ".pkl")
+
+    n_symbols = len(embedding_weights)
+
+    clf.add(Embedding(input_dim=n_symbols,
+                      output_dim=vocab_dim,
+                      input_length=maxlen,
+                      weights=[embedding_weights],
+                      dropout=0.2))
+    # we add a Convolution1D, which will learn nb_filter
+    # word group filters of size filter_length:
+    clf.add(Convolution1D(nb_filter=nb_filter,
+                          filter_length=filter_length,
+                          border_mode='valid',
+                          activation='relu',
+                          subsample_length=1))
+    # we use max pooling:
+    clf.add(GlobalMaxPooling1D())
+    # We add a vanilla hidden layer:
+    clf.add(Dense(hidden_dims))
+    clf.add(Dropout(0.2))
+    clf.add(Activation('relu'))
+    # We project onto a single unit output layer, and squash it with a sigmoid:
+    clf.add(Dense(1))
+    clf.add(Activation('sigmoid'))
+    clf.compile(loss='binary_crossentropy',
+                optimizer='adam',
+                metrics=['accuracy'])
+    clf.fit(X_train, y_train,
+            batch_size=batch_size,
+            nb_epoch=nb_epoch,
+            validation_data=(X_test, y_test))
+
+    return clf
+
+
+def construct_lstm(vocab_dim, maxlen, batch_size):
+
+    embedding_weights = unpickle_file("cnn_embedding_weights_" + str(corpus) + "n_" + str(negation) + ".pkl")
+
+    n_symbols = len(embedding_weights)
+
+    clf = Sequential()  # or Graph or whatever
+    clf.add(Embedding(input_dim=n_symbols,
+                      output_dim=vocab_dim,
+                      mask_zero=True,
+                      weights=[embedding_weights],
+                      input_length=maxlen))  # Adding Input Length
+    clf.add(LSTM(vocab_dim))
+    clf.add(Dropout(0.5))
+    clf.add(Dense(1, activation='sigmoid'))
+    # model.add(Dense(1, activation='relu'))
+
+    print('Compiling the Model...')
+    clf.compile(loss='binary_crossentropy',
+                optimizer='adam',
+                metrics=['accuracy'])
+
+    clf.fit(X_train, y_train, batch_size=batch_size, nb_epoch=nb_epoch,
+            validation_data=(X_test, y_test))
+
+    return clf
+
+
+def construct_nn(vocab_dim, maxlen, batch_size, nn):
+    global X_train, X_test, y_train, y_test, clf
+    print('Pad sequences (samples x time)')
+    X_train = sequence.pad_sequences(X_train, maxlen=maxlen)
+    X_test = sequence.pad_sequences(X_test, maxlen=maxlen)
+    y_train = np.array(y_train)
+    y_test = np.array(y_test)
+    print('X_train shape:', X_train.shape)
+    print('X_test shape:', X_test.shape)
+
+    print('Build model...')
+
+    if nn == "cnn":
+        clf = construct_cnn(vocab_dim=vocab_dim, maxlen=maxlen, batch_size=batch_size)
+    elif nn == "lstm":
+        clf = construct_lstm(vocab_dim=vocab_dim, maxlen=maxlen, batch_size=batch_size)
+
+    return clf
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Train the model you want to use')
-    parser.add_argument('-d', '--dataset', help='which dataset imdb or mrd', required=True, nargs=1, type=str)
+    parser.add_argument('-d', '--dataset', help='which dataset imdb or spd', required=True, nargs=1, type=str)
     parser.add_argument('-s', '--sentiwordnet', help='use sentiwordnet and precise number of features', required=False,
                         type=int)
-    parser.add_argument('-m', '--model', help='which model svm or lstm', required=True, nargs=1, type=str)
+    parser.add_argument('-m', '--model', help='which model cnn, lstm, svm', required=True, nargs=1, type=str)
     parser.add_argument('-j', '--joblib', help='number of jobs for parallelism', required=False, type=int,
                         default=num_cores)
     parser.add_argument('-hash', '--hash', help='whether use hashing trick', required=False, action='store_true')
     parser.add_argument('-n', '--negation', help='whether do negation(bad result)', required=False, action='store_true')
+    parser.add_argument('-f', '--feature', help='whether use feature selection', required=False, action='store_true')
     args = parser.parse_args()
-
-    n_polarity = 0
-    sentiwordnet = False
-    double_features = False
-    hashing_trick = False
-    negation = False
 
     if args.sentiwordnet == 2:
         double_features = True
@@ -313,8 +450,10 @@ if __name__ == '__main__':
 
     if "lstm" in args.model:
         model = "lstm"
-    else:
+    elif "svm" in args.model:
         model = "svm"
+    elif "cnn" in args.model:
+        model = "cnn"
 
     if args.hash:
         hashing_trick = True
@@ -322,62 +461,55 @@ if __name__ == '__main__':
     if args.negation:
         negation = True
 
-    if "imdb" in str(args.dataset):
-        X_train, X_test, y_train, y_test = build_dict_feature_vectorizer_imdb(double_features)
+    if args.feature:
+        feature_selection = True
 
-        if hashing_trick:
-            print("pickle file : " + model + '_test_imdb_' + str(n_polarity) + '_hash.pkl')
-            pickle_file(model + '_test_imdb_' + str(n_polarity) + '_hash.pkl', (X_test, y_test))
-        else:
-            if negation:
-                print("pickle file : " + model + '_test_imdb_' + str(n_polarity) + '_n.pkl')
-                pickle_file(model + '_test_imdb_' + str(n_polarity) + '_n.pkl', (X_test, y_test))
-            else:
-                print("pickle file : " + model + '_test_imdb_' + str(n_polarity) + '.pkl')
-                pickle_file(model + '_test_imdb_' + str(n_polarity) + '.pkl', (X_test, y_test))
+    corpus = str(args.dataset)
+
+    if "imdb" in corpus:
+        X_train, X_test, y_train, y_test = build_dict_feature_imdb(double_features)
+
+    elif "spd" in corpus:
+        X_train, X_test, y_train, y_test = build_dict_feature_spd(double_features)
+
+    else:
+        parser.error("-d, --dataset requires imdb or spd")
+
+    if model == "svm":
 
         print("Fitting SVM")
         clf = svm.SVC(kernel='linear', C=1)
         clf.fit(X_train, y_train)
 
-        if hashing_trick:
-            print('Saving model : ' + model + '_train_imdb_' + str(n_polarity) + '_hash.pkl')
-            pickle_file(model + '_train_imdb_' + str(n_polarity) + '_hash.pkl', clf)
-        else:
-            if negation:
-                print('Saving model : ' + model + '_train_imdb_' + str(n_polarity) + '_n.pkl')
-                pickle_file(model + '_train_imdb_' + str(n_polarity) + '_n.pkl', clf)
-            else:
-                print('Saving model : ' + model + '_train_imdb_' + str(n_polarity) + '.pkl')
-                pickle_file(model + '_train_imdb_' + str(n_polarity) + '.pkl', clf)
+        print("pickle file : {0}_train_{1}_{2}_h{3}_n{4}_f{5}.pkl".format(model, corpus, str(n_polarity),
+                                                                          str(hashing_trick), str(negation),
+                                                                          str(feature_selection)))
 
-    elif "mrd" in str(args.dataset):
-        X_train, X_test, y_train, y_test = build_dict_feature_vectorizer_mrd(double_features)
+        pickle_file('{0}_train_{1}_{2}_h{3}_n{4}_f{5}.pkl'.format(model, corpus, str(n_polarity),
+                                                                  str(hashing_trick), str(negation),
+                                                                  str(feature_selection)),clf)
 
-        if hashing_trick:
-            print("pickle file : " + model + '_test_mrd_' + str(n_polarity) + '_hash.pkl')
-            pickle_file(model + '_test_mrd_' + str(n_polarity) + '_hash.pkl', (X_test, y_test))
-        else:
-            if negation:
-                print("pickle file : " + model + '_test_mrd_' + str(n_polarity) + '_n.pkl')
-                pickle_file(model + '_test_mrd_' + str(n_polarity) + '_n.pkl', (X_test, y_test))
-            else:
-                print("pickle file : " + model + '_test_mrd_' + str(n_polarity) + '.pkl')
-                pickle_file(model + '_test_mrd_' + str(n_polarity) + '.pkl', (X_test, y_test))
+    elif model == "cnn" or model == "lstm":
+        from keras.preprocessing import sequence
+        from keras.models import Sequential
+        from keras.layers import Dense, Dropout, Activation, LSTM
+        from keras.layers import Embedding
+        from keras.layers import Convolution1D, GlobalMaxPooling1D
 
-        print("Fitting SVM")
-        clf = svm.SVC(kernel='linear', C=1, gamma=0.1)
-        clf.fit(X_train, y_train)
+        if "spd" in corpus:
+            clf = construct_nn(vocab_dim=vocab_dim_SPD, maxlen=maxlen_SPD, batch_size=batch_size_SPD, nn=model)
+        elif "imdb" in corpus:
+            clf = construct_nn(vocab_dim=vocab_dim_IMDB, maxlen=maxlen_IMDB, batch_size=batch_size_IMDB, nn=model)
 
-        if hashing_trick:
-            print('Saving model : ' + model + '_train_mrd_' + str(n_polarity) + '_hash.pkl')
-            pickle_file(model + '_train_mrd_' + str(n_polarity) + '_hash.pkl', clf)
-        else:
-            if negation:
-                print('Saving model : ' + model + '_train_mrd_' + str(n_polarity) + '_n.pkl')
-                pickle_file(model + '_train_mrd_' + str(n_polarity) + '_n.pkl', clf)
-            else:
-                print('Saving model : ' + model + '_train_mrd_' + str(n_polarity) + '.pkl')
-                pickle_file(model + '_train_mrd_' + str(n_polarity) + '.pkl', clf)
-    else:
-        parser.error("-d, --dataset requires imdb or mrd")
+        print("saving file : {0}_train_{1}_{2}_h{3}_n{4}.h5".format(model, corpus, str(n_polarity),
+                                                                    str(hashing_trick), str(negation)))
+        clf.save('{0}_train_{1}_{2}_h{3}_n{4}.h5'.format(model, corpus, str(n_polarity),
+                                                         str(hashing_trick), str(negation)))
+
+    print("pickle file : {0}_test_{1}_{2}_h{3}_n{4}_f{5}.pkl".format(model, corpus, str(n_polarity),
+                                                                     str(hashing_trick), str(negation),
+                                                                     str(feature_selection)))
+
+    pickle_file('{0}_test_{1}_{2}_h{3}_n{4}_f{5}.pkl'.format(model, corpus, str(n_polarity),
+                                                             str(hashing_trick), str(negation), str(feature_selection)),
+                                                            (X_test, y_test))
