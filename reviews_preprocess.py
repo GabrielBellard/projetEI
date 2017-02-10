@@ -60,17 +60,18 @@ def build_dict_feature_imdb(double_features):
     if model == "svm":
         X_train, vectorizer_fitted = build_dic_svm(sentences_train, double_features)
         X_test, _ = build_dic_svm(sentences_test, double_features, vectorizer_fitted)
+        n = X_train.shape[0] / 2
+        y_train = [1] * n + [0] * n
+        y_test = [1] * n + [0] * n
 
     elif model == "cnn" or model == "lstm":
-        X_train, w2indx = build_dic_nn(sentences=sentences_train, double_features=double_features,
-                                       vocab_dim=vocab_dim_IMDB,
-                                       n_exposures=n_exposures_IMDB)
+        X_train, tokenizer = build_dic_nn(sentences=sentences_train, double_features=double_features)
 
-        X_test, _ = build_dic_nn(sentences=sentences_test, double_features=double_features, w2indx=w2indx)
+        X_test, _ = build_dic_nn(sentences=sentences_test, double_features=double_features, tokenizer=tokenizer)
 
-    n = X_train.shape[0] / 2
-    y_train = [1] * n + [0] * n
-    y_test = [1] * n + [0] * n
+        n = len(X_train) / 2
+        y_train = [1] * n + [0] * n
+        y_test = [1] * n + [0] * n
 
     if feature_selection:
         print("Doing feature selection")
@@ -116,10 +117,8 @@ def build_dict_feature_spd(double_features):
         X_train, vectorizer = build_dic_svm(sentences_train, double_features)
         X_test, _ = build_dic_svm(sentences_test, double_features, vectorizer)
     elif model == "cnn" or model == "lstm":
-        X_train, w2indx = build_dic_nn(sentences=sentences_train, double_features=double_features,
-                                       vocab_dim=vocab_dim_SPD,
-                                       n_exposures=n_exposures_SPD)
-        X_test, _ = build_dic_nn(sentences=sentences_test, double_features=double_features, w2indx=w2indx)
+        X_train, tokenizer = build_dic_nn(sentences=sentences_train, double_features=double_features)
+        X_test, _ = build_dic_nn(sentences=sentences_test, double_features=double_features, tokenizer=tokenizer)
 
     if feature_selection:
         print("Doing feature selection")
@@ -181,7 +180,7 @@ def build_dic_svm(sentences, double_features, vectorizer_fitted=None):
         return X_sentences, vectorizer
 
 
-def build_dic_nn(sentences, double_features, w2indx=None, vocab_dim=None, n_exposures=None):
+def build_dic_nn(sentences, double_features, tokenizer=None):
     do_negation = negation
 
     if sentiwordnet:
@@ -192,54 +191,59 @@ def build_dic_nn(sentences, double_features, w2indx=None, vocab_dim=None, n_expo
 
     sentences_stem2 = [' '.join(term) for term in sentences_stem]
 
-    if w2indx is None:
-        w2indx = train_w2v(sentences_stem, vocab_dim, n_exposures)
-
-    X_sentences = build_w2c_dic(sentences_stem2, w2indx)
+    X_sentences, tokenizer = build_w2c_dic(sentences_stem2, tokenizer)
 
     if sentiwordnet:
         X = scipy.sparse.hstack([X_sentences, X_polarity])
-        return X, w2indx
+        return X, tokenizer
 
     else:
-        return X_sentences, w2indx
+        return X_sentences, tokenizer
 
 
-def build_w2c_dic(sentences_stem2, w2indx):
-    X_sentences = []
-    for doc in sentences_stem2:
-        new_txt = []
-        for word in doc:
-            try:
-                new_txt.append(w2indx[word])
-            except:
-                new_txt.append(0)
-        X_sentences.append(new_txt)
-    return X_sentences
+def build_w2c_dic(sentences_stem2, tokenizer=None):
+
+    from keras.preprocessing.text import Tokenizer
+
+    sentences_stem2 = [s.encode('utf-8') for s in sentences_stem2]
+
+    if tokenizer is None:
+        tokenizer = Tokenizer(nb_words=50)
+        tokenizer.fit_on_texts(sentences_stem2)
+        word_index = tokenizer.word_index
+        print('Found %s unique tokens.' % len(word_index))
+        pickle_file("word_index_"+model+"_"+corpus, word_index)
+    else:
+        tokenizer = tokenizer
+
+    X_sentences = tokenizer.texts_to_sequences(sentences_stem2)
+
+    return X_sentences, tokenizer
 
 
-def train_w2v(sentences_stem2, vocab_dim, n_exposures):
-    print('Training a Word2vec model...')
-    model = Word2Vec(size=vocab_dim,
-                     min_count=n_exposures,
-                     window=window_size,
-                     workers=num_cores,
-                     iter=n_iterations)
-    model.build_vocab(sentences_stem2)
-    model.train(sentences_stem2)
-    gensim_dict = Dictionary()
-    gensim_dict.doc2bow(model.vocab.keys(), allow_update=True)
-    w2indx = {v: k + 1 for k, v in gensim_dict.items()}
-    w2vec = {word: model[word] for word in w2indx.keys()}
-    print('Setting up Arrays for Keras Embedding Layer...')
-    n_symbols = len(w2indx) + 1  # adding 1 to account for 0th index
-    embedding_weights = np.zeros((n_symbols + 1, vocab_dim))
-    for word, index in w2indx.items():
-        embedding_weights[index, :] = w2vec[word]
-
-    pickle_file("cnn_embedding_weights_" + str(corpus) + "n_" + str(negation) + ".pkl", embedding_weights)
-
-    return w2indx
+# def train_w2v(sentences_stem2, vocab_dim, n_exposures):
+#
+#     embeddings_index = {}
+#     f = open('glove.6B.100d.txt')
+#     for line in f:
+#         values = line.split()
+#         word = values[0]
+#         coefs = np.asarray(values[1:], dtype='float32')
+#         embeddings_index[word] = coefs
+#     f.close()
+#
+#     print('Found %s word vectors.' % len(embeddings_index))
+#
+#     embedding_matrix = np.zeros((len(word_index) + 1, EMBEDDING_DIM))
+#     for word, i in word_index.items():
+#         embedding_vector = embeddings_index.get(word)
+#         if embedding_vector is not None:
+#             # words not found in embedding index will be all-zeros.
+#             embedding_matrix[i] = embedding_vector
+#
+#     pickle_file("cnn_embedding_weights_" + str(corpus) + "n_" + str(negation) + ".pkl", embedding_weights)
+#
+#     return w2indx
 
 
 def get_polarity(double_features, sentences):
@@ -302,12 +306,11 @@ def compute_polarity(sentence, double_features):
 
 
 def preprocessing_sentences(sentence, do_negation):
-    # Remove punctuation, stopword and then stemmering
+    # Remove punctuation, stopword, html tag and then stemmering
+
     punctuation = set(string.punctuation)
     stemmer = nltk.PorterStemmer()
-
     sentence = BeautifulSoup(sentence, "lxml").get_text()
-    # sentence = nltk.re.sub("[^a-zA-Z]", " ", sentence)
 
     tmp = sentence
     doc = []
@@ -335,16 +338,18 @@ def preprocessing_sentences(sentence, do_negation):
     return doc
 
 
-def construct_cnn(vocab_dim, maxlen, batch_size):
+def construct_cnn(vocab_dim, maxlen, batch_size, X_train, y_train, embedding_matrix):
     clf = Sequential()
-    embedding_weights = unpickle_file("cnn_embedding_weights_" + str(corpus) + "n_" + str(negation) + ".pkl")
 
-    n_symbols = len(embedding_weights)
+
+    n_symbols = len(embedding_matrix)
+
+    print(len(embedding_matrix))
 
     clf.add(Embedding(input_dim=n_symbols,
                       output_dim=vocab_dim,
                       input_length=maxlen,
-                      weights=[embedding_weights],
+                      weights=[embedding_matrix],
                       dropout=0.2))
     # we add a Convolution1D, which will learn nb_filter
     # word group filters of size filter_length:
@@ -362,31 +367,29 @@ def construct_cnn(vocab_dim, maxlen, batch_size):
     # We project onto a single unit output layer, and squash it with a sigmoid:
     clf.add(Dense(1))
     clf.add(Activation('sigmoid'))
+
     clf.compile(loss='binary_crossentropy',
                 optimizer='adam',
                 metrics=['accuracy'])
     clf.fit(X_train, y_train,
             batch_size=batch_size,
             nb_epoch=nb_epoch,
-            validation_data=(X_test, y_test))
+            validation_split=0.1)
 
     return clf
 
 
-def construct_lstm(vocab_dim, maxlen, batch_size):
-
-    embedding_weights = unpickle_file("cnn_embedding_weights_" + str(corpus) + "n_" + str(negation) + ".pkl")
-
-    n_symbols = len(embedding_weights)
+def construct_lstm(vocab_dim, maxlen, batch_size, X_train, y_train, embedding_matrix):
 
     clf = Sequential()  # or Graph or whatever
+    n_symbols = len(embedding_matrix)
     clf.add(Embedding(input_dim=n_symbols,
                       output_dim=vocab_dim,
                       mask_zero=True,
-                      weights=[embedding_weights],
+                      weights=[embedding_matrix],
                       input_length=maxlen))  # Adding Input Length
     clf.add(LSTM(vocab_dim))
-    clf.add(Dropout(0.5))
+    # clf.add(Dropout(0.5))
     clf.add(Dense(1, activation='sigmoid'))
     # model.add(Dense(1, activation='relu'))
 
@@ -395,14 +398,13 @@ def construct_lstm(vocab_dim, maxlen, batch_size):
                 optimizer='adam',
                 metrics=['accuracy'])
 
-    clf.fit(X_train, y_train, batch_size=batch_size, nb_epoch=nb_epoch,
-            validation_data=(X_test, y_test))
+    clf.fit(X_train, y_train, batch_size=batch_size, nb_epoch=nb_epoch, validation_split=0.1)
 
     return clf
 
 
-def construct_nn(vocab_dim, maxlen, batch_size, nn):
-    global X_train, X_test, y_train, y_test, clf
+def construct_nn(vocab_dim, maxlen, batch_size, nn, X_train, X_test, y_train, y_test):
+
     print('Pad sequences (samples x time)')
     X_train = sequence.pad_sequences(X_train, maxlen=maxlen)
     X_test = sequence.pad_sequences(X_test, maxlen=maxlen)
@@ -411,12 +413,32 @@ def construct_nn(vocab_dim, maxlen, batch_size, nn):
     print('X_train shape:', X_train.shape)
     print('X_test shape:', X_test.shape)
 
-    print('Build model...')
+    print('Loading model...')
+
+    embeddings_index = {}
+    f = open(os.path.join('glove/','glove.6B.100d.txt'))
+    for line in f:
+        values = line.split()
+        word = values[0]
+        coefs = np.asarray(values[1:], dtype='float32')
+        embeddings_index[word] = coefs
+    f.close()
+
+    print('Found %s word vectors.' % len(embeddings_index))
+    word_index = unpickle_file("word_index_"+model+"_"+corpus)
+    embedding_matrix = np.zeros((len(word_index) + 1, vocab_dim))
+    for word, i in word_index.items():
+        embedding_vector = embeddings_index.get(word)
+        if embedding_vector is not None:
+            # words not found in embedding index will be all-zeros.
+            embedding_matrix[i] = embedding_vector
 
     if nn == "cnn":
-        clf = construct_cnn(vocab_dim=vocab_dim, maxlen=maxlen, batch_size=batch_size)
+        clf = construct_cnn(vocab_dim=vocab_dim, maxlen=maxlen, batch_size=batch_size,
+                            X_train=X_train, y_train=y_train, embedding_matrix=embedding_matrix)
     elif nn == "lstm":
-        clf = construct_lstm(vocab_dim=vocab_dim, maxlen=maxlen, batch_size=batch_size)
+        clf = construct_lstm(vocab_dim=vocab_dim, maxlen=maxlen, batch_size=batch_size,
+                             X_train=X_train, y_train=y_train, embedding_matrix=embedding_matrix)
 
     return clf
 
@@ -497,13 +519,15 @@ if __name__ == '__main__':
         from keras.layers import Convolution1D, GlobalMaxPooling1D
 
         if "spd" in corpus:
-            clf = construct_nn(vocab_dim=vocab_dim_SPD, maxlen=maxlen_SPD, batch_size=batch_size_SPD, nn=model)
+            clf = construct_nn(vocab_dim=vocab_dim_SPD, maxlen=maxlen_SPD, batch_size=batch_size_SPD, nn=model,
+                               X_train=X_train, X_test=X_test, y_train=y_train, y_test=y_test)
         elif "imdb" in corpus:
-            clf = construct_nn(vocab_dim=vocab_dim_IMDB, maxlen=maxlen_IMDB, batch_size=batch_size_IMDB, nn=model)
+            clf = construct_nn(vocab_dim=vocab_dim_IMDB, maxlen=maxlen_IMDB, batch_size=batch_size_IMDB, nn=model,
+                               X_train=X_train, X_test=X_test, y_train=y_train, y_test=y_test)
 
         print("saving file : {0}_train_{1}_{2}_h{3}_n{4}.h5".format(model, corpus, str(n_polarity),
                                                                     str(hashing_trick), str(negation)))
-        clf.save('{0}_train_{1}_{2}_h{3}_n{4}.h5'.format(model, corpus, str(n_polarity),
+        clf.save(directory+'{0}_train_{1}_{2}_h{3}_n{4}.h5'.format(model, corpus, str(n_polarity),
                                                          str(hashing_trick), str(negation)))
 
     print("pickle file : {0}_test_{1}_{2}_h{3}_n{4}_f{5}.pkl".format(model, corpus, str(n_polarity),

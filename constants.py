@@ -23,12 +23,12 @@ n_iterations = 1
 window_size = 5
 
 
-vocab_dim_IMDB = 50
+vocab_dim_IMDB = 100
 maxlen_IMDB = 400
 n_exposures_IMDB = 30
 batch_size_IMDB = 200
 
-vocab_dim_SPD = 32
+vocab_dim_SPD = 100
 maxlen_SPD = 40
 n_exposures_SPD = 2
 batch_size_SPD = 100
